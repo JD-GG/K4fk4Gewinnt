@@ -3,10 +3,11 @@ import websocket
 import threading
 import json
 import os
+from dotenv import load_dotenv
 
 # --- CONFIG ---
-SERVER_URL = "http://213.153.88.123:14314/move"
-WS_URL = "ws://213.153.88.123:14314/ws"   # <- musst du checken, wie der Endpoint genau heißt!
+SERVER_URL = os.getenv("SERVER_URL")
+WS_URL = os.getenv("WS_URL")
 
 # --- GLOBAL ---
 current_board = [[0]*7 for _ in range(6)]
