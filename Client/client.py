@@ -13,6 +13,7 @@ PLAYER = int(input("Spieler-Nummer (1 oder 2): "))
 current_board = [[0]*7 for _ in range(6)]
 your_turn = False
 ws = None
+game_over = False
 
 # --- HELPER ---
 def clear_console():
@@ -45,10 +46,12 @@ def send_move(column):
 
 # --- WEBSOCKET HANDLING ---
 def on_message(ws_, message):
-    global current_board, your_turn
+    global current_board, your_turn, game_over
     try:
         data = json.loads(message)
-        if "board" in data:
+
+        # normaler Board-Update
+        if "board" in data and "winner" not in data:
             current_board = data["board"]
             your_turn = (data.get("yourTurn", 0) == PLAYER)
             render_board(current_board)
@@ -56,8 +59,30 @@ def on_message(ws_, message):
                 print("Dein Zug!")
             else:
                 print("Warte auf den anderen Spieler...")
+            game_over = False
+
+        # Spielende
+        elif "winner" in data:
+            current_board = data["board"]
+            render_board(current_board)
+            game_over = True
+            if data["winner"] == PLAYER:
+                print("\n🎉🎉🎉 DU HAST GEWONNEN! 🎉🎉🎉\n")
+            else:
+                print("\n😢 Leider verloren! 😢\n")
+
+            # jetzt direkt fragen
+            again = input("Nochmal spielen? (j/n): ")
+            if again.lower().startswith("j"):
+                print("Warte auf Neustart...")
+                game_over = False  # zurücksetzen, bis Server neues Spiel pusht
+            else:
+                print("Spiel beendet.")
+                os._exit(0)
+
         elif "error" in data:
             print(f"Fehler: {data['error']}")
+
     except Exception as e:
         print(f"WS parse error: {e}")
 
@@ -79,20 +104,26 @@ def ws_thread():
 
 # --- MAIN LOOP ---
 def main():
-    global your_turn
+    global your_turn, game_over
     print("Vier Gewinnt Client gestartet.\n")
     render_board(current_board)
+
     t = threading.Thread(target=ws_thread, daemon=True)
     t.start()
+
     while True:
-        if your_turn:
+        # nur abfragen, wenn es auch Sinn macht
+        if your_turn and not game_over:
             move = input("Deine Spalte (0-6): ")
             if not move.isdigit() or not (0 <= int(move) <= 6):
                 print("Ungültige Eingabe. Bitte 0-6 eingeben.")
                 continue
             send_move(int(move))
+            your_turn = False
         else:
-            pass
+            # kleine Pause, damit CPU nicht 100% läuft
+            import time
+            time.sleep(0.2)
 
 if __name__ == "__main__":
     try:
