@@ -1,17 +1,18 @@
-import requests
 import websocket
 import threading
 import json
 import os
 from dotenv import load_dotenv
+load_dotenv()
 
 # --- CONFIG ---
-SERVER_URL = os.getenv("SERVER_URL")
 WS_URL = os.getenv("WS_URL")
+PLAYER = int(input("Spieler-Nummer (1 oder 2): "))
 
 # --- GLOBAL ---
 current_board = [[0]*7 for _ in range(6)]
 your_turn = False
+ws = None
 
 # --- HELPER ---
 def clear_console():
@@ -24,17 +25,10 @@ def render_board(board):
         2: "X"    # Spieler 2
     }
     clear_console()
-    
-    # Spaltennummern
     print("    " + "   ".join(str(i) for i in range(7)))
-
-    # Top border
     print("  ┌───" + "┬───" * 6 + "┐")
-
     for r, row in enumerate(board):
-        # Zeile mit Symbolen
         print("  │ " + " │ ".join(symbols[cell] for cell in row) + " │")
-        # Zwischenlinien oder Bottom
         if r < len(board) - 1:
             print("  ├───" + "┼───" * 6 + "┤")
         else:
@@ -42,42 +36,39 @@ def render_board(board):
     print()
 
 def send_move(column):
-    global your_turn, current_board
+    global ws
     try:
-        response = requests.post(SERVER_URL, json={"column": column})
-        if response.status_code == 200:
-            data = response.json()
-            current_board = data.get("board", current_board)
-            your_turn = data.get("yourTurn", False)
-            render_board(current_board)
-        else:
-            print(f"Server error: {response.status_code}")
+        msg = json.dumps({"column": column, "player": PLAYER})
+        ws.send(msg)
     except Exception as e:
-        print(f"Connection error: {e}")
+        print(f"WebSocket send error: {e}")
 
 # --- WEBSOCKET HANDLING ---
-def on_message(ws, message):
+def on_message(ws_, message):
     global current_board, your_turn
     try:
         data = json.loads(message)
         if "board" in data:
             current_board = data["board"]
-            your_turn = data.get("yourTurn", False)
+            your_turn = (data.get("yourTurn", 0) == PLAYER)
             render_board(current_board)
             if your_turn:
-                print("✅ Dein Zug!")
+                print("Dein Zug!")
             else:
-                print("⏳ Warte auf den anderen Spieler...")
+                print("Warte auf den anderen Spieler...")
+        elif "error" in data:
+            print(f"Fehler: {data['error']}")
     except Exception as e:
         print(f"WS parse error: {e}")
 
-def on_error(ws, error):
+def on_error(ws_, error):
     print(f"WebSocket error: {error}")
 
-def on_close(ws, close_status_code, close_msg):
+def on_close(ws_, close_status_code, close_msg):
     print("WebSocket connection closed")
 
 def ws_thread():
+    global ws
     ws = websocket.WebSocketApp(
         WS_URL,
         on_message=on_message,
@@ -90,13 +81,9 @@ def ws_thread():
 def main():
     global your_turn
     print("Vier Gewinnt Client gestartet.\n")
-
     render_board(current_board)
-
-    # Starte WebSocket in eigenem Thread
     t = threading.Thread(target=ws_thread, daemon=True)
     t.start()
-
     while True:
         if your_turn:
             move = input("Deine Spalte (0-6): ")
@@ -105,7 +92,6 @@ def main():
                 continue
             send_move(int(move))
         else:
-            # einfach warten bis WebSocket signal gibt
             pass
 
 if __name__ == "__main__":

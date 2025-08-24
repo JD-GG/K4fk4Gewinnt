@@ -10,31 +10,6 @@ services:
     env_file:
       - .env
 
-  kafka:
-    image: confluentinc/cp-kafka:7.5.0
-    container_name: kafka
-    ports:
-      - "9092:9092"
-    networks:
-      - k4fk4-net
-    env_file:
-      - .env
-
-  kafka-ui:
-    image: provectuslabs/kafka-ui:latest
-    container_name: kafka-ui
-    ports:
-      - "8080:8080"
-    networks:
-      - k4fk4-net
-    env_file:
-      - .env
-    environment:
-      KAFKA_CLUSTERS_0_NAME: local
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
-    depends_on:
-      - kafka
-
 networks:
   k4fk4-net:
     external: true
