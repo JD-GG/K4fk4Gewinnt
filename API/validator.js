@@ -88,7 +88,7 @@ const mainWss = new WebSocket.Server({ port: PORT }, () => {
 });
 
 mainWss.on("connection", (ws) => {
-  ws.send(JSON.stringify({ message: "Willkommen zum K4fk4Gewinnt!" }));
+  //ws.send(JSON.stringify({ message: "Willkommen zum K4fk4Gewinnt!" }));
   ws.on("message", (msg) => {
     try {
       const data = JSON.parse(msg);
