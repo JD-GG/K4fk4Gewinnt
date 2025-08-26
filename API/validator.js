@@ -161,7 +161,6 @@ function handleLobby(lobbyWss){
               setTimeout(() => {
                 reset_game();
                 broadcastBoard();
-                lobbyWss.kill();
               }, 3000); // 3 Sekunden warten, dann neues Spiel
               return;
             }
