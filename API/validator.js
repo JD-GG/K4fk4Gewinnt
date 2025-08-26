@@ -216,3 +216,18 @@ lobbyWss.on("connection", (ws) => {
     }
   });
 });*/
+
+const shutdown = async () => {
+  console.log('🛑 Shutting down API service...');
+
+  try {
+    await writeApi.close();
+    console.log('✅ Influx write API closed.');
+  } catch (e) {
+    console.warn('⚠️ Error closing write API:', e.message);
+  }
+
+  process.exit(0);
+};
+
+process.on('SIGTERM', shutdown);
