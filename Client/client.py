@@ -14,7 +14,7 @@ rest = rest.split("/")[0]  # 'localhost:14314'
 HOST, MAIN_PORT_STR = rest.split(":")  # HOST='localhost', MAIN_PORT_STR='14314'
 PORT = int(MAIN_PORT_STR)              # PORT = 14314 als int
 LOBBY = int(input("Lobby erstellen oder beitreten? (0 oder LobbyID): "))
-PLAYER = int(input("Spieler-Nummer (1 oder 2): "))
+PLAYER = None
 
 
 # --- GLOBAL ---
@@ -32,7 +32,7 @@ def clear_console():
 def render_board(board, lobby_id):
     symbols = {0: " ", 1: "O", 2: "X"}
     clear_console()
-    print(f"Lobby-ID: {lobby_id}\n")  # Lobby-ID immer oben
+    print(f"Lobby-ID: {lobby_id}\n")
     print("    " + "   ".join(str(i) for i in range(7)))
     print("  ┌───" + "┬───" * 6 + "┐")
     for r, row in enumerate(board):
@@ -42,6 +42,13 @@ def render_board(board, lobby_id):
         else:
             print("  └───" + "┴───" * 6 + "┘")
     print()
+
+    # Status nur anzeigen, wenn Spiel noch läuft
+    if not game_over:
+        if your_turn:
+            print("👉 Dein Zug!")
+        else:
+            print("⏳ Warte auf den Zug des anderen Spielers...")
 
 def send_move(column):
     global ws
@@ -70,37 +77,45 @@ def join_main_server():
         print(f"Fehler: {data.get('error', 'unbekannt')}")
         return None
 
-
 # --- GAME HANDLING ---
 def on_message(ws_, message):
-    global current_board, your_turn, game_over
+    global current_board, your_turn, game_over, PLAYER
     try:
         data = json.loads(message)
         print(f"[Client] Nachricht erhalten: {data}")  # LOGGING
 
-        if "board" in data and "winner" not in data:
+        if "winner" in data:  # zuerst Sieger behandeln!
             current_board = data["board"]
-            your_turn = data.get("yourTurn", False)
-            render_board(current_board, lobby_id)
-            # print(f"[Client] Dein Zug: {your_turn}")
-            game_over = False
-
-        elif "winner" in data:
-            current_board = data["board"]
-            render_board(current_board, lobby_id)
             game_over = True
-            # print(f"[Client] Spiel vorbei. Gewinner: Spieler {data['winner']}")
+            render_board(current_board, lobby_id)
             if data["winner"] == PLAYER:
                 print("\n🎉 DU HAST GEWONNEN! 🎉\n")
             else:
                 print("\n😢 Leider verloren! 😢\n")
             again = input("Nochmal spielen? (j/n): ")
             if again.lower().startswith("j"):
-                # print("[Client] Warte auf Neustart...")
                 game_over = False
             else:
-                # print("[Client] Spiel beendet.")
                 os._exit(0)
+
+        elif "draw" in data:  # --- Unentschieden korrekt prüfen ---
+            current_board = data["board"]
+            game_over = True
+            render_board(current_board, lobby_id)
+            print("\n🤝 Unentschieden! 🤝\n")
+            again = input("Nochmal spielen? (j/n): ")
+            if again.lower().startswith("j"):
+                game_over = False
+            else:
+                os._exit(0)
+
+        elif "board" in data:   # erst danach normales Board-Update
+            current_board = data["board"]
+            your_turn = data.get("yourTurn", False)
+            if "playerID" in data:
+                PLAYER = data["playerID"]
+            render_board(current_board, lobby_id)
+            game_over = False
 
         elif "error" in data:
             print(f"[Client] Fehler: {data['error']}")

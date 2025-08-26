@@ -138,7 +138,8 @@ function handleLobbyConnection(lobbyPort, ws) {
 
   ws.send(JSON.stringify({ 
     board: lobby.board, 
-    yourTurn: ws.playerID === lobby.currentPlayer 
+    yourTurn: ws.playerID === lobby.currentPlayer,
+    playerID: ws.playerID
   }));
 
   ws.on("message", (msg) => {
@@ -164,6 +165,24 @@ function handleLobbyConnection(lobbyPort, ws) {
           lobby.clients.forEach(client => {
             if (client.readyState === WebSocket.OPEN) {
               client.send(JSON.stringify({ board: lobby.board, winner: data.player, yourTurn: false }));
+            }
+          });
+
+          setTimeout(() => {
+            console.log(`[Lobby ${lobbyPort}] Lobby wird zurückgesetzt.`);
+            resetLobby(lobby);
+            broadcastLobby(lobby);
+          }, 3000);
+          return;
+        }
+
+        // --- NEU: Unentschieden prüfen ---
+        const isFull = lobby.board.every(row => row.every(cell => cell !== 0));
+        if (isFull) {
+          console.log(`[Lobby ${lobbyPort}] Unentschieden!`);
+          lobby.clients.forEach(client => {
+            if (client.readyState === WebSocket.OPEN) {
+              client.send(JSON.stringify({ board: lobby.board, draw: true, yourTurn: false }));
             }
           });
 
@@ -226,46 +245,6 @@ function resetLobby(lobby) {
   lobby.board = Array.from({ length: 6 }, () => Array(7).fill(0));
   lobby.currentPlayer = 1;
 }
-
-
-// --- HANDLE LOBBY MESSAGES ---
-/*
-lobbyWss.on("connection", (ws) => {
-  ws.send(JSON.stringify({ board: currentBoard, yourTurn: currentPlayer }));
-
-  ws.on("message", (msg) => {
-    try {
-      const data = JSON.parse(msg);
-      if (typeof data.column === "number" && data.player === currentPlayer) {
-        if (dropDisc(data.column, currentPlayer)) {
-          // Gewinner-Check
-          if (check_winner(currentBoard, currentPlayer)) {
-            broadcastBoard();
-            wss.clients.forEach((client) => {
-              if (client.readyState === WebSocket.OPEN) {
-                client.send(JSON.stringify({
-                  winner: currentPlayer,
-                  board: currentBoard
-                }));
-              }
-            });
-            setTimeout(() => {
-              reset_game();
-              broadcastBoard();
-            }, 3000); // 3 Sekunden warten, dann neues Spiel
-            return;
-          }
-          currentPlayer = currentPlayer === 1 ? 2 : 1;
-          broadcastBoard();
-        } else {
-          ws.send(JSON.stringify({ error: "Spalte voll", board: currentBoard, yourTurn: currentPlayer }));
-        }
-      }
-    } catch (e) {
-      ws.send(JSON.stringify({ error: "Ungültige Nachricht" }));
-    }
-  });
-});*/
 
 const shutdown = async () => {
   console.log('🛑 Shutting down API service...');
