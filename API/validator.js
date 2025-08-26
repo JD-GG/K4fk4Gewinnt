@@ -71,9 +71,9 @@ function dropDisc(column, player) {
   return false; // Spalte voll
 }
 
-function broadcastBoard() {
+function broadcastBoard(lobbyWss) {
   const msg = JSON.stringify({ board: currentBoard, yourTurn: currentPlayer });
-  wss.clients.forEach((client) => {
+  lobbyWss.clients.forEach((client) => {
     if (client.readyState === WebSocket.OPEN) {
       client.send(msg);
     }
@@ -149,8 +149,8 @@ function handleLobby(lobbyWss){
           if (dropDisc(data.column, currentPlayer)) {
             // Gewinner-Check
             if (check_winner(currentBoard, currentPlayer)) {
-              broadcastBoard();
-              wss.clients.forEach((client) => {
+              broadcastBoard(lobbyWss);
+              lobbyWss.clients.forEach((client) => {
                 if (client.readyState === WebSocket.OPEN) {
                   client.send(JSON.stringify({
                     winner: currentPlayer,
@@ -160,12 +160,12 @@ function handleLobby(lobbyWss){
               });
               setTimeout(() => {
                 reset_game();
-                broadcastBoard();
+                broadcastBoard(lobbyWss);
               }, 3000); // 3 Sekunden warten, dann neues Spiel
               return;
             }
             currentPlayer = currentPlayer === 1 ? 2 : 1;
-            broadcastBoard();
+            broadcastBoard(lobbyWss);
           } else {
             ws.send(JSON.stringify({ error: "Spalte voll", board: currentBoard, yourTurn: currentPlayer }));
           }
