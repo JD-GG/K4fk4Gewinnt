@@ -2,11 +2,13 @@ import websocket
 import threading
 import json
 import os
+import time
 from dotenv import load_dotenv
 load_dotenv()
 
 # --- CONFIG ---
-WS_URL = os.getenv("WS_URL")
+MAIN_WS_URL = os.getenv("WS_URL")  # z.B. ws://localhost:14314
+LOBBY = int(input("Lobby erstellen oder beitreten? (0 oder LobbyID): "))
 PLAYER = int(input("Spieler-Nummer (1 oder 2): "))
 
 # --- GLOBAL ---
@@ -14,17 +16,15 @@ current_board = [[0]*7 for _ in range(6)]
 your_turn = False
 ws = None
 game_over = False
+lobby_ws_url = None
+
 
 # --- HELPER ---
 def clear_console():
     os.system('cls' if os.name == 'nt' else 'clear')
 
 def render_board(board):
-    symbols = {
-        0: " ",   # leer
-        1: "O",   # Spieler 1
-        2: "X"    # Spieler 2
-    }
+    symbols = {0: " ", 1: "O", 2: "X"}
     clear_console()
     print("    " + "   ".join(str(i) for i in range(7)))
     print("  ┌───" + "┬───" * 6 + "┐")
@@ -44,38 +44,56 @@ def send_move(column):
     except Exception as e:
         print(f"WebSocket send error: {e}")
 
-# --- WEBSOCKET HANDLING ---
+
+# --- LOBBY HANDLING ---
+def join_main_server():
+    """Verbindet sich mit dem Hauptserver und holt Lobby-Infos."""
+    main_ws = websocket.create_connection(MAIN_WS_URL)
+    main_ws.send(json.dumps({"Lobby": LOBBY}))
+    resp = main_ws.recv()
+    data = json.loads(resp)
+    main_ws.close()
+
+    if "port" in data:
+        port = data["port"]
+        url = f"ws://{MAIN_WS_URL.split(':')[1].strip('/') }:{port}"
+        print(f"Neue Lobby erstellt auf {url}")
+        return url
+    else:
+        # Wenn direkt beitreten (z.B. Lobby-ID != 0),
+        # dann bauen wir die URL manuell zusammen.
+        port = 14314 + LOBBY  # simplifiziert: Lobby N = Port 14314+N
+        url = f"ws://{MAIN_WS_URL.split(':')[1].strip('/') }:{port}"
+        print(f"Tritt Lobby {LOBBY} bei auf {url}")
+        return url
+
+
+# --- GAME HANDLING ---
 def on_message(ws_, message):
     global current_board, your_turn, game_over
     try:
         data = json.loads(message)
 
-        # normaler Board-Update
         if "board" in data and "winner" not in data:
             current_board = data["board"]
             your_turn = (data.get("yourTurn", 0) == PLAYER)
             render_board(current_board)
-            if your_turn:
-                print("Dein Zug!")
-            else:
-                print("Warte auf den anderen Spieler...")
+            print("Dein Zug!" if your_turn else "Warte auf den anderen Spieler...")
             game_over = False
 
-        # Spielende
         elif "winner" in data:
             current_board = data["board"]
             render_board(current_board)
             game_over = True
             if data["winner"] == PLAYER:
-                print("\n🎉🎉🎉 DU HAST GEWONNEN! 🎉🎉🎉\n")
+                print("\n🎉 DU HAST GEWONNEN! 🎉\n")
             else:
                 print("\n😢 Leider verloren! 😢\n")
 
-            # jetzt direkt fragen
             again = input("Nochmal spielen? (j/n): ")
             if again.lower().startswith("j"):
                 print("Warte auf Neustart...")
-                game_over = False  # zurücksetzen, bis Server neues Spiel pusht
+                game_over = False
             else:
                 print("Spiel beendet.")
                 os._exit(0)
@@ -93,26 +111,31 @@ def on_close(ws_, close_status_code, close_msg):
     print("WebSocket connection closed")
 
 def ws_thread():
-    global ws
+    global ws, lobby_ws_url
     ws = websocket.WebSocketApp(
-        WS_URL,
+        lobby_ws_url,
         on_message=on_message,
         on_error=on_error,
         on_close=on_close
     )
     ws.run_forever()
 
+
 # --- MAIN LOOP ---
 def main():
-    global your_turn, game_over
+    global your_turn, game_over, lobby_ws_url
     print("Vier Gewinnt Client gestartet.\n")
     render_board(current_board)
 
+    # Schritt 1: Hole Lobby-URL
+    lobby_ws_url = join_main_server()
+
+    # Schritt 2: Starte Verbindung mit der Lobby
     t = threading.Thread(target=ws_thread, daemon=True)
     t.start()
 
+    # Schritt 3: Eingabeloop
     while True:
-        # nur abfragen, wenn es auch Sinn macht
         if your_turn and not game_over:
             move = input("Deine Spalte (0-6): ")
             if not move.isdigit() or not (0 <= int(move) <= 6):
@@ -121,9 +144,8 @@ def main():
             send_move(int(move))
             your_turn = False
         else:
-            # kleine Pause, damit CPU nicht 100% läuft
-            import time
             time.sleep(0.2)
+
 
 if __name__ == "__main__":
     try:
