@@ -7,11 +7,15 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # --- CONFIG ---
-MAIN_WS_URL = os.getenv("WS_URL")  # z.B. ws://localhost:14314
-SHEME, rest = MAIN_WS_URL.split("://")  # scheme='ws', rest='localhost:14314'
-HOST, PORT = rest.split(":")  # host='localhost', port='14314'
+MAIN_WS_URL = os.getenv("WS_URL")  # z.B. ws://localhost:14314/ws
+SCHEME, rest = MAIN_WS_URL.split("://")  # 'ws', 'localhost:14314/ws'
+# /ws entfernen, falls vorhanden
+rest = rest.split("/")[0]  # 'localhost:14314'
+HOST, MAIN_PORT_STR = rest.split(":")  # HOST='localhost', MAIN_PORT_STR='14314'
+PORT = int(MAIN_PORT_STR)              # PORT = 14314 als int
 LOBBY = int(input("Lobby erstellen oder beitreten? (0 oder LobbyID): "))
 PLAYER = int(input("Spieler-Nummer (1 oder 2): "))
+
 
 # --- GLOBAL ---
 current_board = [[0]*7 for _ in range(6)]
@@ -19,15 +23,16 @@ your_turn = False
 ws = None
 game_over = False
 lobby_ws_url = None
-
+lobby_id = None
 
 # --- HELPER ---
 def clear_console():
     os.system('cls' if os.name == 'nt' else 'clear')
 
-def render_board(board):
+def render_board(board, lobby_id):
     symbols = {0: " ", 1: "O", 2: "X"}
     clear_console()
+    print(f"Lobby-ID: {lobby_id}\n")  # Lobby-ID immer oben
     print("    " + "   ".join(str(i) for i in range(7)))
     print("  ┌───" + "┬───" * 6 + "┐")
     for r, row in enumerate(board):
@@ -76,25 +81,25 @@ def on_message(ws_, message):
         if "board" in data and "winner" not in data:
             current_board = data["board"]
             your_turn = data.get("yourTurn", False)
-            render_board(current_board)
-            print(f"[Client] Dein Zug: {your_turn}")
+            render_board(current_board, lobby_id)
+            # print(f"[Client] Dein Zug: {your_turn}")
             game_over = False
 
         elif "winner" in data:
             current_board = data["board"]
-            render_board(current_board)
+            render_board(current_board, lobby_id)
             game_over = True
-            print(f"[Client] Spiel vorbei. Gewinner: Spieler {data['winner']}")
+            # print(f"[Client] Spiel vorbei. Gewinner: Spieler {data['winner']}")
             if data["winner"] == PLAYER:
                 print("\n🎉 DU HAST GEWONNEN! 🎉\n")
             else:
                 print("\n😢 Leider verloren! 😢\n")
             again = input("Nochmal spielen? (j/n): ")
             if again.lower().startswith("j"):
-                print("[Client] Warte auf Neustart...")
+                # print("[Client] Warte auf Neustart...")
                 game_over = False
             else:
-                print("[Client] Spiel beendet.")
+                # print("[Client] Spiel beendet.")
                 os._exit(0)
 
         elif "error" in data:
@@ -122,12 +127,19 @@ def ws_thread():
 
 # --- MAIN LOOP ---
 def main():
-    global your_turn, game_over, lobby_ws_url
+    global your_turn, game_over, lobby_ws_url, lobby_id
     print("Vier Gewinnt Client gestartet.\n")
-    render_board(current_board)
 
     # Schritt 1: Hole Lobby-URL
     lobby_ws_url = join_main_server()
+    if not lobby_ws_url:
+        print("Fehler: Keine Lobby-URL erhalten. Beende Client.")
+        return
+
+    # Lobby-ID aus der URL ableiten
+    port_str = lobby_ws_url.split(":")[-1]   # "14316/ws"
+    port_only = port_str.split("/")[0]       # "14316"
+    lobby_id = int(port_only) - int(PORT)    # jetzt global
 
     # Schritt 2: Starte Verbindung mit der Lobby
     t = threading.Thread(target=ws_thread, daemon=True)
