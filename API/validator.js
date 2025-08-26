@@ -55,51 +55,30 @@ function check_winner(board, player) {
   return false;
 }
 
-function reset_game() {
-  currentBoard = Array.from({ length: 6 }, () => Array(7).fill(0));
-  currentPlayer = 1;
-}
-
-// --- HELPERS ---
-function dropDisc(column, player) {
-  for (let row = 5; row >= 0; row--) {
-    if (currentBoard[row][column] === 0) {
-      currentBoard[row][column] = player;
-      return true;
-    }
-  }
-  return false; // Spalte voll
-}
-
-function broadcastBoard(lobbyWss) {
-  const msg = JSON.stringify({ board: currentBoard, yourTurn: currentPlayer });
-  lobbyWss.clients.forEach((client) => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(msg);
-    }
-  });
-}
-
 // --- WEBSOCKET SERVER ---
-const activeLobbies = {};
+const activeLobbies = {}; 
+/*
+activeLobbies = {
+  14315: {
+      board: [...],           // 6x7 Board
+      currentPlayer: 1,       // aktuell am Zug
+      clients: []             // verbundenen WebSocket Clients
+  }
+}
+*/
 
 const mainWss = new WebSocket.Server({ port: PORT }, () => {
   console.log(`WebSocket Server läuft auf Port ${PORT}`);
 });
 
 mainWss.on("connection", (ws) => {
-  //ws.send(JSON.stringify({ message: "Willkommen zum K4fk4Gewinnt!" }));
   ws.on("message", (msg) => {
     try {
       const data = JSON.parse(msg);
+      if (typeof data.Lobby !== "number") throw new Error("Ungültige Lobby-ID");
 
-      if (typeof data.Lobby != "number"){
-        throw new Error("Ungültige Lobby-ID");
-      }
-        
-      // Create new lobby dynamically
+      // --- LOBBY ERSTELLEN ---
       if (data.Lobby === 0) {
-        // Find a free port for the lobby
         let lobbyPort = 0;
         for (let i = 1; i <= 4; i++) {
           const candidatePort = PORT + i;
@@ -115,67 +94,130 @@ mainWss.on("connection", (ws) => {
 
         const lobbyWss = new WebSocket.Server({ port: lobbyPort }, () => {
           console.log(`Lobby WebSocket Server läuft auf Port ${lobbyPort}`);
-          ws.send(JSON.stringify({ port: lobbyPort })); // <-- ANTWORT ERST HIER!
-          handleLobby(lobbyWss);
+
+          // Lobby initialisieren
+          activeLobbies[lobbyPort] = {
+            board: Array.from({ length: 6 }, () => Array(7).fill(0)),
+            currentPlayer: 1,
+            clients: []
+          };
+
+          ws.send(JSON.stringify({ port: lobbyPort }));
         });
 
-        // Track active lobbies
-        activeLobbies[lobbyPort] = { server: lobbyWss, port: lobbyPort };
+        lobbyWss.on("connection", (clientWs) => handleLobbyConnection(lobbyPort, clientWs));
 
-        // Set up a mechanism to kill the server when lobby ends
-        lobbyWss.on("close", () => {
-          delete activeLobbies[data.Lobby];
-        });
+        // Lobby Cleanup
+        lobbyWss.on("close", () => delete activeLobbies[lobbyPort]);
+        lobbyWss.kill = () => lobbyWss.close();
 
-        // Expose a function to kill the lobby server
-        lobbyWss.kill = () => {
-          lobbyWss.close();
-        };
+      } 
+      // --- LOBBY JOINEN ---
+      else {
+        const joinPort = PORT + data.Lobby;
+        if (!activeLobbies[joinPort]) {
+          ws.send(JSON.stringify({ error: "Lobby existiert nicht" }));
+        } else {
+          ws.send(JSON.stringify({ port: joinPort }));
+        }
       }
-    }catch (e) {
+
+    } catch (e) {
       ws.send(JSON.stringify({ error: "Ungültige Nachricht" }));
     }
   });
 });
 
-function handleLobby(lobbyWss){
-  lobbyWss.on("connection", (ws) => {
-    ws.send(JSON.stringify({ board: currentBoard, yourTurn: currentPlayer }));
+function handleLobbyConnection(lobbyPort, ws) {
+  const lobby = activeLobbies[lobbyPort];
+  
+  // Spieler-ID zuweisen
+  ws.playerID = lobby.clients.length + 1;
+  lobby.clients.push(ws);
 
-    ws.on("message", (msg) => {
-      try {
-        const data = JSON.parse(msg);
-        if (typeof data.column === "number" && data.player === currentPlayer) {
-          if (dropDisc(data.column, currentPlayer)) {
-            // Gewinner-Check
-            if (check_winner(currentBoard, currentPlayer)) {
-              broadcastBoard(lobbyWss);
-              lobbyWss.clients.forEach((client) => {
-                if (client.readyState === WebSocket.OPEN) {
-                  client.send(JSON.stringify({
-                    winner: currentPlayer,
-                    board: currentBoard
-                  }));
-                }
-              });
-              setTimeout(() => {
-                reset_game();
-                broadcastBoard(lobbyWss);
-              }, 3000); // 3 Sekunden warten, dann neues Spiel
-              return;
-            }
-            currentPlayer = currentPlayer === 1 ? 2 : 1;
-            broadcastBoard(lobbyWss);
-          } else {
-            ws.send(JSON.stringify({ error: "Spalte voll", board: currentBoard, yourTurn: currentPlayer }));
-          }
+  // Aktuelles Board + Turn senden
+  ws.send(JSON.stringify({ 
+    board: lobby.board, 
+    yourTurn: ws.playerID === lobby.currentPlayer 
+  }));
+
+  ws.on("message", (msg) => {
+    try {
+      const data = JSON.parse(msg);
+
+      if (typeof data.column === "number" && data.player === lobby.currentPlayer) {
+
+        // Disc setzen
+        if (!dropDiscLobby(lobby, data.column, data.player)) {
+          ws.send(JSON.stringify({ error: "Spalte voll", board: lobby.board, yourTurn: true }));
+          return;
         }
-      } catch (e) {
-        ws.send(JSON.stringify({ error: "Ungültige Nachricht" }));
+
+        // Gewinner prüfen für den Spieler, der gezogen hat
+        if (check_winner(lobby.board, data.player)) {
+          // Gewinner broadcasten
+          lobby.clients.forEach(client => {
+            if (client.readyState === WebSocket.OPEN) {
+              client.send(JSON.stringify({ 
+                board: lobby.board,
+                winner: data.player,
+                yourTurn: false // Spiel ist vorbei
+              }));
+            }
+          });
+
+          // Reset nach kurzer Zeit
+          setTimeout(() => {
+            resetLobby(lobby);
+            broadcastLobby(lobby);
+          }, 3000);
+          return;
+        }
+
+        // Spieler wechseln
+        lobby.currentPlayer = lobby.currentPlayer === 1 ? 2 : 1;
+
+        // Broadcast für alle Spieler, Turn korrekt setzen
+        broadcastLobby(lobby);
+
       }
-    });
+    } catch (e) {
+      ws.send(JSON.stringify({ error: "Ungültige Nachricht" }));
+    }
+  });
+
+  ws.on("close", () => {
+    lobby.clients = lobby.clients.filter(c => c !== ws);
   });
 }
+
+function broadcastLobby(lobby) {
+  // Jeder Spieler bekommt aktuelle Board-Ansicht und Turn
+  lobby.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify({
+        board: lobby.board,
+        yourTurn: client.playerID === lobby.currentPlayer
+      }));
+    }
+  });
+}
+
+function dropDiscLobby(lobby, column, player) {
+  for (let row = 5; row >= 0; row--) {
+    if (lobby.board[row][column] === 0) {
+      lobby.board[row][column] = player;
+      return true;
+    }
+  }
+  return false;
+}
+
+function resetLobby(lobby) {
+  lobby.board = Array.from({ length: 6 }, () => Array(7).fill(0));
+  lobby.currentPlayer = 1;
+}
+
 
 // --- HANDLE LOBBY MESSAGES ---
 /*

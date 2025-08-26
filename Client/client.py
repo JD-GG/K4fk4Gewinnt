@@ -8,6 +8,8 @@ load_dotenv()
 
 # --- CONFIG ---
 MAIN_WS_URL = os.getenv("WS_URL")  # z.B. ws://localhost:14314
+SHEME, rest = MAIN_WS_URL.split("://")  # scheme='ws', rest='localhost:14314'
+HOST, PORT = rest.split(":")  # host='localhost', port='14314'
 LOBBY = int(input("Lobby erstellen oder beitreten? (0 oder LobbyID): "))
 PLAYER = int(input("Spieler-Nummer (1 oder 2): "))
 
@@ -56,16 +58,12 @@ def join_main_server():
 
     if "port" in data:
         port = data["port"]
-        url = f"ws://{MAIN_WS_URL.split(':')[1].strip('/') }:{port}"
-        print(f"Neue Lobby erstellt auf {url}")
+        url = f"ws://{HOST}:{port}"  # kein /ws
+        print(f"Verbinde mit Lobby auf {url}")
         return url
     else:
-        # Wenn direkt beitreten (z.B. Lobby-ID != 0),
-        # dann bauen wir die URL manuell zusammen.
-        port = 14314 + LOBBY  # simplifiziert: Lobby N = Port 14314+N
-        url = f"ws://{MAIN_WS_URL.split(':')[1].strip('/') }:{port}"
-        print(f"Tritt Lobby {LOBBY} bei auf {url}")
-        return url
+        print(f"Fehler: {data.get('error', 'unbekannt')}")
+        return None
 
 
 # --- GAME HANDLING ---
