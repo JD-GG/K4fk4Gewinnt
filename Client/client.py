@@ -71,36 +71,37 @@ def on_message(ws_, message):
     global current_board, your_turn, game_over
     try:
         data = json.loads(message)
+        print(f"[Client] Nachricht erhalten: {data}")  # LOGGING
 
         if "board" in data and "winner" not in data:
             current_board = data["board"]
-            your_turn = (data.get("yourTurn", 0) == PLAYER)
+            your_turn = data.get("yourTurn", False)
             render_board(current_board)
-            print("Dein Zug!" if your_turn else "Warte auf den anderen Spieler...")
+            print(f"[Client] Dein Zug: {your_turn}")
             game_over = False
 
         elif "winner" in data:
             current_board = data["board"]
             render_board(current_board)
             game_over = True
+            print(f"[Client] Spiel vorbei. Gewinner: Spieler {data['winner']}")
             if data["winner"] == PLAYER:
                 print("\n🎉 DU HAST GEWONNEN! 🎉\n")
             else:
                 print("\n😢 Leider verloren! 😢\n")
-
             again = input("Nochmal spielen? (j/n): ")
             if again.lower().startswith("j"):
-                print("Warte auf Neustart...")
+                print("[Client] Warte auf Neustart...")
                 game_over = False
             else:
-                print("Spiel beendet.")
+                print("[Client] Spiel beendet.")
                 os._exit(0)
 
         elif "error" in data:
-            print(f"Fehler: {data['error']}")
+            print(f"[Client] Fehler: {data['error']}")
 
     except Exception as e:
-        print(f"WS parse error: {e}")
+        print(f"[Client] WS parse error: {e}")
 
 def on_error(ws_, error):
     print(f"WebSocket error: {error}")
