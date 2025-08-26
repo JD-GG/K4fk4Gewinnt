@@ -113,7 +113,9 @@ mainWss.on("connection", (ws) => {
           return;
         }
 
-        const lobbyWss = new WebSocket.Server({ port: lobbyPort });
+        const lobbyWss = new WebSocket.Server({ port: lobbyPort }, () => {
+          console.log(`WebSocket Server läuft auf Port ${PORT}`);
+        });
 
         // Track active lobbies
         activeLobbies[lobbyPort] = { server: lobbyWss, port: lobbyPort };
