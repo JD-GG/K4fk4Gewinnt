@@ -132,7 +132,7 @@ mainWss.on("connection", (ws) => {
           lobbyWss.close();
         };
 
-        handleLobby(lobbyWss, true);
+        handleLobby(lobbyWss);
       }
     }catch (e) {
       ws.send(JSON.stringify({ error: "Ungültige Nachricht" }));
