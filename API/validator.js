@@ -114,13 +114,13 @@ mainWss.on("connection", (ws) => {
         }
 
         const lobbyWss = new WebSocket.Server({ port: lobbyPort }, () => {
-          console.log(`WebSocket Server läuft auf Port ${lobbyPort}`);
+          console.log(`Lobby WebSocket Server läuft auf Port ${lobbyPort}`);
+          ws.send(JSON.stringify({ port: lobbyPort })); // <-- ANTWORT ERST HIER!
+          handleLobby(lobbyWss);
         });
 
         // Track active lobbies
         activeLobbies[lobbyPort] = { server: lobbyWss, port: lobbyPort };
-
-        ws.send(JSON.stringify({ port: lobbyPort }));
 
         // Set up a mechanism to kill the server when lobby ends
         lobbyWss.on("close", () => {
@@ -131,8 +131,6 @@ mainWss.on("connection", (ws) => {
         lobbyWss.kill = () => {
           lobbyWss.close();
         };
-
-        handleLobby(lobbyWss);
       }
     }catch (e) {
       ws.send(JSON.stringify({ error: "Ungültige Nachricht" }));
