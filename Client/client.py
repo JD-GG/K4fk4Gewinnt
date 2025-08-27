@@ -33,7 +33,7 @@ def clear_console():
 def render_board(board, lobby_id):
     symbols = {0: " ", 1: "O", 2: "X"}
     clear_console()
-    print(f"Lobby-ID: {lobby_id}\n")
+    print(f"LobbyID: {lobby_id}\n")
     print("    " + "   ".join(str(i) for i in range(7)))
     print("  ┌───" + "┬───" * 6 + "┐")
     for r, row in enumerate(board):
@@ -159,7 +159,7 @@ def main():
 
     # Schritt 1: Hole Lobby-URL
     while lobby_ws_url is None:
-        lobby_input = int(input("Lobby erstellen\t\t[0]\nBeitreten\t\t[LobbyID]\nAktive Lobbies anzeigen\t[10]\nLeere Lobbies beenden\t[11]\nEingabe: "))
+        lobby_input = int(input("Lobby erstellen\t\t[0]\nBeitreten LobbyID\t[1-5]\nAktive Lobbies anzeigen\t[10]\nLeere Lobbies beenden\t[11]\nEingabe: "))
         clear_console()
         lobby_ws_url = join_main_server(lobby_input)
     if not lobby_ws_url:
