@@ -169,7 +169,7 @@ def main():
     # Lobby-ID aus der URL ableiten
     port_str = lobby_ws_url.split(":")[-1]   # "14316/ws"
     port_only = port_str.split("/")[0]       # "14316"
-    lobby_id = int(port_only) - int(PORT)    # jetzt global
+    lobby_id = int(port_only) - int(PORT)    # "1" jetzt global
 
     # Schritt 2: Starte Verbindung mit der Lobby
     t = threading.Thread(target=ws_thread, daemon=True)
