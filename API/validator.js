@@ -113,7 +113,7 @@ mainWss.on("connection", (ws) => {
 
       } 
       // --- LOBBY JOINEN ---
-      else {
+      else if (data.Lobby != 0) {
         const joinPort = PORT + data.Lobby;
         if (!activeLobbies[joinPort]) {
           ws.send(JSON.stringify({ error: "Lobby existiert nicht" }));
@@ -121,7 +121,9 @@ mainWss.on("connection", (ws) => {
           ws.send(JSON.stringify({ port: joinPort }));
         }
       }
-
+      else{
+        throw new Error("Ungültige Daten"); 
+      }
     } catch (e) {
       ws.send(JSON.stringify({ error: "Ungültige Nachricht" }));
     }
