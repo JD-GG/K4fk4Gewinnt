@@ -93,7 +93,7 @@ def on_message(ws_, message):
     global current_board, your_turn, game_over, PLAYER
     try:
         data = json.loads(message)
-        print(f"[Client] Nachricht erhalten: {data}")  # LOGGING
+        # print(f"[Client] Nachricht erhalten: {data}")  # LOGGING
 
         if "winner" in data:  # zuerst Sieger behandeln!
             current_board = data["board"]
