@@ -80,7 +80,7 @@ mainWss.on("connection", (ws) => {
       // --- LOBBY ERSTELLEN ---
       if (data.Lobby === 0) {
         let lobbyPort = 0;
-        for (let i = 1; i <= 4; i++) {
+        for (let i = 1; i <= 5; i++) {
           const candidatePort = PORT + i;
           if (!activeLobbies[candidatePort]) {
             lobbyPort = candidatePort;
@@ -99,7 +99,8 @@ mainWss.on("connection", (ws) => {
           activeLobbies[lobbyPort] = {
             board: Array.from({ length: 6 }, () => Array(7).fill(0)),
             currentPlayer: 1,
-            clients: []
+            clients: [],
+            wss: lobbyWss
           };
 
           ws.send(JSON.stringify({ port: lobbyPort }));
@@ -112,11 +113,31 @@ mainWss.on("connection", (ws) => {
         lobbyWss.kill = () => lobbyWss.close();
 
       } 
+      // --- LOBBY SERVER AUFLISTEN (ADMIN) ---
+      else if (data.Lobby === 10) {
+        const lobbyList = Object.keys(activeLobbies).map(port => ({
+          port: port,
+          players: activeLobbies[port].clients.length,
+          lobbyID: port - PORT
+        }));
+        ws.send(JSON.stringify({ lobbies: lobbyList }));
+      }
+      // --- LOBBY SERVER BEENDEN (ADMIN) ---
+      else if (data.Lobby === 11) {
+        Object.keys(activeLobbies).forEach(port => {
+          const lobbyWss = activeLobbies[port].wss;
+          if (lobbyWss) {
+            console.log(`Schließe Lobby auf Port ${port}`);
+            lobbyWss.kill();
+          }
+        });
+        ws.send(JSON.stringify({ message: "Alle toten Lobbys geschlossen" }));
+      }
       // --- LOBBY JOINEN ---
       else if (data.Lobby != 0) {
         const joinPort = PORT + data.Lobby;
         if (!activeLobbies[joinPort]) {
-          ws.send(JSON.stringify({ error: "Lobby existiert nicht" }));
+          ws.send(JSON.stringify({ error: `Lobby ${data.Lobby} existiert nicht`}));
         } else {
           ws.send(JSON.stringify({ port: joinPort }));
         }

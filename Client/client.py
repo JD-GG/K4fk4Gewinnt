@@ -3,6 +3,7 @@ import threading
 import json
 import os
 import time
+import sys
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -13,7 +14,7 @@ SCHEME, rest = MAIN_WS_URL.split("://")  # 'ws', 'localhost:14314/ws'
 rest = rest.split("/")[0]  # 'localhost:14314'
 HOST, MAIN_PORT_STR = rest.split(":")  # HOST='localhost', MAIN_PORT_STR='14314'
 PORT = int(MAIN_PORT_STR)              # PORT = 14314 als int
-LOBBY = int(input("Lobby erstellen oder beitreten? (0 oder LobbyID): "))
+#LOBBY = int(input("Lobby erstellen oder beitreten? (0 oder LobbyID): "))
 PLAYER = None
 
 
@@ -60,10 +61,10 @@ def send_move(column):
 
 
 # --- LOBBY HANDLING ---
-def join_main_server():
+def join_main_server(lobby_input):
     """Verbindet sich mit dem Hauptserver und holt Lobby-Infos."""
     main_ws = websocket.create_connection(MAIN_WS_URL)
-    main_ws.send(json.dumps({"Lobby": LOBBY}))
+    main_ws.send(json.dumps({"Lobby": lobby_input}))
     resp = main_ws.recv()
     data = json.loads(resp)
     main_ws.close()
@@ -73,6 +74,16 @@ def join_main_server():
         url = f"ws://{HOST}:{port}"  # kein /ws
         print(f"Verbinde mit Lobby auf {url}")
         return url
+    if "lobbies" in data:
+        print("Verfügbare Lobbies:")
+        if not data["lobbies"]:
+            print(" - Keine aktiven Lobbies gefunden.")
+        for lobby in data["lobbies"]:
+            print(f" - Port: {lobby['port']}, Spieler: {lobby['players']}/2, LobbyID: {lobby['lobbyID']}")
+        return None
+    if "message" in data:
+        print(f"Info: {data['message']}")
+        return None
     else:
         print(f"Fehler: {data.get('error', 'unbekannt')}")
         return None
@@ -143,10 +154,14 @@ def ws_thread():
 # --- MAIN LOOP ---
 def main():
     global your_turn, game_over, lobby_ws_url, lobby_id
+    clear_console()
     print("Vier Gewinnt Client gestartet.\n")
 
     # Schritt 1: Hole Lobby-URL
-    lobby_ws_url = join_main_server()
+    while lobby_ws_url is None:
+        lobby_input = int(input("Lobby erstellen\t\t[0]\nBeitreten\t\t[LobbyID]\nAktive Lobbies anzeigen\t[10]\nLeere Lobbies beenden\t[11]\nEingabe: "))
+        clear_console()
+        lobby_ws_url = join_main_server(lobby_input)
     if not lobby_ws_url:
         print("Fehler: Keine Lobby-URL erhalten. Beende Client.")
         return
@@ -163,8 +178,17 @@ def main():
     # Schritt 3: Eingabeloop
     while True:
         if your_turn and not game_over:
-            move = input("Deine Spalte (0-6): ")
+            move = input("Zurück zum Hauptmenü\t[11]\nSpalte auswählen\t[0-6]\nEingabe: ")
+            if move == "11":
+                if ws is not None:
+                    try:
+                        ws.close()
+                    except Exception:
+                        pass
+                os.execv(sys.executable, [sys.executable] + sys.argv)
             if not move.isdigit() or not (0 <= int(move) <= 6):
+                clear_console()
+                render_board(current_board, lobby_id)
                 print("Ungültige Eingabe. Bitte 0-6 eingeben.")
                 continue
             send_move(int(move))
@@ -178,3 +202,8 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         print("\nSpiel beendet.")
+        if ws is not None:
+            try:
+                ws.close()
+            except Exception:
+                pass
